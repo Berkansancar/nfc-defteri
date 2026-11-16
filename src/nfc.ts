@@ -1,0 +1,145 @@
+import NfcManager, { Ndef, NfcTech, TagEvent } from "react-native-nfc-manager";
+
+export function bytesToHex(bytes: number[] | Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export function hexToBytes(hex: string): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < hex.length; i += 2) {
+    out.push(parseInt(hex.slice(i, i + 2), 16));
+  }
+  return out;
+}
+
+let started = false;
+
+export async function initNfc(): Promise<boolean> {
+  if (started) return true;
+  const supported = await NfcManager.isSupported();
+  if (!supported) return false;
+  await NfcManager.start();
+  started = true;
+  return true;
+}
+
+export async function isNfcEnabled(): Promise<boolean> {
+  try {
+    return await NfcManager.isEnabled();
+  } catch {
+    return false;
+  }
+}
+
+export interface ScanResult {
+  kind: "ndef" | "locked";
+  uidHex: string;
+  techTypes: string[];
+  ndefHex: string | null;
+  ndefPreview: string | null;
+  writable: boolean;
+}
+
+function buildPreview(tag: TagEvent): string | null {
+  const records = tag.ndefMessage;
+  if (!records || records.length === 0) return null;
+  try {
+    const first = records[0];
+    // Metin kaydı mı?
+    const text = Ndef.text.decodePayload(Uint8Array.from(first.payload as number[]));
+    if (text) return text;
+  } catch {
+    // metin değilse devam
+  }
+  try {
+    const first = records[0];
+    const uri = Ndef.uri.decodePayload(Uint8Array.from(first.payload as number[]));
+    if (uri) return uri;
+  } catch {
+    // uri değilse devam
+  }
+  return `${records.length} veri kaydı`;
+}
+
+async function readUidAndTech(): Promise<{ uidHex: string; techTypes: string[] }> {
+  const tag = await NfcManager.getTag();
+  const uidHex = (tag?.id ?? "").toString().toLowerCase();
+  const techTypes = (tag?.techTypes as string[] | undefined) ?? [];
+  return { uidHex, techTypes };
+}
+
+/**
+ * Telefonu bir etikete/karta okutup sonucu sınıflandırır.
+ * Önce NDEF olarak okumayı dener; başarısız olursa (kilitli/özel kart)
+ * sadece kimlik bilgisini (UID) okuyup "locked" olarak işaretler.
+ */
+export async function scanTag(): Promise<ScanResult> {
+  await initNfc();
+
+  // 1) Önce NDEF dene
+  try {
+    await NfcManager.requestTechnology(NfcTech.Ndef);
+    const tag = await NfcManager.getTag();
+    const uidHex = (tag?.id ?? "").toString().toLowerCase();
+    const techTypes = (tag?.techTypes as string[] | undefined) ?? [];
+
+    let ndefHex: string | null = null;
+    let preview: string | null = null;
+    if (tag?.ndefMessage && tag.ndefMessage.length > 0) {
+      const bytes = Ndef.encodeMessage(tag.ndefMessage as any);
+      if (bytes) ndefHex = bytesToHex(bytes);
+      preview = buildPreview(tag);
+    }
+
+    const writable = Boolean((tag as any)?.isWritable ?? true);
+
+    await NfcManager.cancelTechnologyRequest();
+
+    return {
+      kind: "ndef",
+      uidHex,
+      techTypes,
+      ndefHex,
+      ndefPreview: preview,
+      writable: ndefHex != null && writable,
+    };
+  } catch {
+    await NfcManager.cancelTechnologyRequest().catch(() => {});
+  }
+
+  // 2) NDEF olmadı — sadece kimlik bilgisini oku (kapı kartı, İstanbulkart vb.)
+  try {
+    await NfcManager.requestTechnology(NfcTech.NfcA);
+    const { uidHex, techTypes } = await readUidAndTech();
+    await NfcManager.cancelTechnologyRequest();
+    return {
+      kind: "locked",
+      uidHex,
+      techTypes,
+      ndefHex: null,
+      ndefPreview: null,
+      writable: false,
+    };
+  } catch (e) {
+    await NfcManager.cancelTechnologyRequest().catch(() => {});
+    throw e;
+  }
+}
+
+/** Kaydedilmiş bir NDEF verisini boş/yazılabilir bir etikete yazar. */
+export async function writeNdefToBlankTag(ndefHex: string): Promise<void> {
+  await initNfc();
+  const bytes = hexToBytes(ndefHex);
+  try {
+    await NfcManager.requestTechnology(NfcTech.Ndef);
+    await (NfcManager as any).ndefHandler.writeNdefMessage(bytes);
+  } finally {
+    await NfcManager.cancelTechnologyRequest().catch(() => {});
+  }
+}
+
+export async function cancelScan(): Promise<void> {
+  await NfcManager.cancelTechnologyRequest().catch(() => {});
+}

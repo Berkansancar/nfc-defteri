@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "NFC Defterim",
+    "slug": "nfc-defteri",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "nfcdefteri",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "com.berkansancar.nfcdefteri",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1e40af"
+      },
+      "permissions": ["android.permission.NFC"]
+    },
+    "plugins": [
+      "expo-sqlite",
+      "./plugins/withNfcHce.js",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": false
+          }
+        }
+      ]
+    ]
+  }
+}

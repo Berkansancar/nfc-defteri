@@ -1,0 +1,66 @@
+name: Android APK Derle
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Java kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Bağımlılıkları yükle
+        run: npm install
+
+      - name: Expo paket sürümlerini SDK ile hizala
+        run: npx expo install --fix
+
+      - name: Native Android projesini oluştur (prebuild)
+        run: npx expo prebuild -p android
+
+      - name: Gradle ile APK derle
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: APK dosyasını bul
+        id: apk
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          echo "APK bulundu: $APK_PATH"
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Derleme çıktısını artifact olarak yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfc-defteri-apk
+          path: ${{ steps.apk.outputs.path }}
+
+      - name: APK'yı Release olarak yayınla
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-build
+          name: "NFC Defterim — son derleme"
+          body: |
+            Bu APK main dalına her gönderimde otomatik olarak yeniden derlenir.
+            Telefonunda bu dosyayı indirip kurabilirsin (bilinmeyen kaynaklara izin vermen gerekebilir).
+          files: ${{ steps.apk.outputs.path }}
+          prerelease: true
