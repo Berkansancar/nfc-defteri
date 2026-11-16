@@ -60,6 +60,18 @@ export async function getScan(id: number): Promise<ScanRecord | null> {
   return row ?? null;
 }
 
+export async function updateScanContent(
+  id: number,
+  ndefHex: string,
+  ndefPreview: string | null
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE scans SET ndefHex = ?, ndefPreview = ?, writable = 1 WHERE id = ?`,
+    [ndefHex, ndefPreview, id]
+  );
+}
+
 export async function renameScan(id: number, label: string): Promise<void> {
   const db = await getDb();
   await db.runAsync(`UPDATE scans SET label = ? WHERE id = ?`, [label, id]);

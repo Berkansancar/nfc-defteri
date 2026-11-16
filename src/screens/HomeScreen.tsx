@@ -105,7 +105,9 @@ export default function HomeScreen({ navigation }: Props) {
         <View style={styles.resultBox}>
           <Text style={styles.resultTitle}>
             {pendingResult.kind === "ndef"
-              ? "Okundu: yazılabilir NFC etiketi"
+              ? pendingResult.ndefHex
+                ? "Okundu: yazılabilir NFC etiketi (içerikli)"
+                : "Okundu: boş ama yazılabilir etiket"
               : "Okundu: kilitli/özel kart"}
           </Text>
           <Text style={styles.resultMeta}>UID: {pendingResult.uidHex}</Text>
@@ -119,6 +121,12 @@ export default function HomeScreen({ navigation }: Props) {
               Bu kart şifreli olduğu için sadece kimlik bilgisi kaydedilecek;
               boş etikete yazma veya telefonla kullanma bu kartta mümkün
               değil.
+            </Text>
+          )}
+          {pendingResult.kind === "ndef" && !pendingResult.ndefHex && (
+            <Text style={styles.resultWarning}>
+              Bu etikette şu an hiç veri yok. Kaydettikten sonra detay
+              sayfasından üzerine bir şey yazabilirsin.
             </Text>
           )}
 

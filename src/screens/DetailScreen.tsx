@@ -12,9 +12,16 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/RootNavigator";
-import { deleteScan, getScan, renameScan, setActiveScan, clearActiveScan } from "../db";
+import {
+  deleteScan,
+  getScan,
+  renameScan,
+  setActiveScan,
+  clearActiveScan,
+  updateScanContent,
+} from "../db";
 import { isHceSupported, setActiveCard, clearActiveCard } from "../hce";
-import { makeTagReadOnly } from "../nfc";
+import { makeTagReadOnly, buildTextNdefHex, writeNdefToBlankTag } from "../nfc";
 import type { ScanRecord } from "../types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Detail">;
@@ -26,6 +33,8 @@ export default function DetailScreen({ route, navigation }: Props) {
   const [labelDraft, setLabelDraft] = useState("");
   const [hceOk, setHceOk] = useState(false);
   const [locking, setLocking] = useState(false);
+  const [freeText, setFreeText] = useState("");
+  const [writingFreeText, setWritingFreeText] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -40,6 +49,7 @@ export default function DetailScreen({ route, navigation }: Props) {
   if (!record) return null;
 
   const canUseDirectly = record.kind === "ndef" && !!record.ndefHex;
+  const isEmptyWritable = record.kind === "ndef" && !record.ndefHex;
   const techList: string[] = (() => {
     try {
       return JSON.parse(record.techTypes);
@@ -95,6 +105,29 @@ export default function DetailScreen({ route, navigation }: Props) {
     }
   }
 
+  async function handleWriteFreeText() {
+    const text = freeText.trim();
+    if (!text) return;
+    setWritingFreeText(true);
+    try {
+      const ndefHex = buildTextNdefHex(text);
+      await writeNdefToBlankTag(ndefHex);
+      await updateScanContent(id, ndefHex, text);
+      setRecord((r: ScanRecord | null) =>
+        r ? { ...r, ndefHex, ndefPreview: text, writable: 1 } : r
+      );
+      setFreeText("");
+      Alert.alert("Yazıldı", "Veri etikete yazıldı ve kayda eklendi.");
+    } catch (e: any) {
+      Alert.alert(
+        "Olmadı",
+        "Yazılamadı. Aynı etiketi telefonun arkasına yaklaştırıp tekrar dene."
+      );
+    } finally {
+      setWritingFreeText(false);
+    }
+  }
+
   function handleLock() {
     Alert.alert(
       "Kalıcı kilitleme",
@@ -144,7 +177,16 @@ export default function DetailScreen({ route, navigation }: Props) {
       )}
 
       <View style={styles.infoBox}>
-        <Row k="Tür" v={record.kind === "ndef" ? "Yazılabilir NFC etiketi" : "Kilitli/özel kart"} />
+        <Row
+          k="Tür"
+          v={
+            canUseDirectly
+              ? "Yazılabilir NFC etiketi (içerik kayıtlı)"
+              : isEmptyWritable
+              ? "Boş ama yazılabilir etiket"
+              : "Kilitli/özel kart"
+          }
+        />
         <Row k="UID" v={record.uidHex} />
         <Row k="Teknolojiler" v={JSON.parse(record.techTypes).join(", ")} />
         <Row k="Kaydedilme" v={new Date(record.createdAt).toLocaleString("tr-TR")} />
@@ -157,6 +199,30 @@ export default function DetailScreen({ route, navigation }: Props) {
             Bu kart şifreli/özel olduğu için sadece kimlik bilgisi saklandı.
             Boş etikete yazma ve telefonla kullanma bu kartta mümkün değil.
           </Text>
+        </View>
+      )}
+
+      {isEmptyWritable && (
+        <View style={styles.infoBox}>
+          <Text style={styles.resultTitleLike}>
+            Bu etiket şu an boş — üzerinde kopyalanacak bir veri yok. Ama
+            yazılabilir olduğu için üzerine bir şey yazabilirsin:
+          </Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Metin veya bağlantı yaz"
+            value={freeText}
+            onChangeText={setFreeText}
+          />
+          <Pressable
+            style={[styles.primaryButton, writingFreeText && styles.disabled]}
+            onPress={handleWriteFreeText}
+            disabled={writingFreeText}
+          >
+            <Text style={styles.primaryButtonText}>
+              {writingFreeText ? "Yazılıyor…" : "Aynı etikete şimdi yaz"}
+            </Text>
+          </Pressable>
         </View>
       )}
 
@@ -293,4 +359,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   dangerOutlineButtonText: { color: "#b91c1c", fontWeight: "700", fontSize: 14 },
+  resultTitleLike: { fontSize: 14, color: "#0f172a", fontWeight: "600" },
+  input: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    backgroundColor: "#f8fafc",
+  },
 });

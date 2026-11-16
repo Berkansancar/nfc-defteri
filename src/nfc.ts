@@ -128,6 +128,13 @@ export async function scanTag(): Promise<ScanResult> {
   }
 }
 
+/** Düz metin/bağlantıdan bir NDEF mesajı (hex) üretir. */
+export function buildTextNdefHex(text: string): string {
+  const record = Ndef.textRecord(text);
+  const bytes = Ndef.encodeMessage([record]);
+  return bytes ? bytesToHex(bytes) : "";
+}
+
 /** Kaydedilmiş bir NDEF verisini boş/yazılabilir bir etikete yazar. */
 export async function writeNdefToBlankTag(ndefHex: string): Promise<void> {
   await initNfc();
