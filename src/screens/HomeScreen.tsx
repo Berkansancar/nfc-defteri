@@ -147,6 +147,13 @@ export default function HomeScreen({ navigation }: Props) {
       >
         <Text style={styles.linkButtonText}>Kayıtlı kartları gör →</Text>
       </Pressable>
+
+      <Pressable
+        style={styles.linkButton}
+        onPress={() => navigation.navigate("Qr")}
+      >
+        <Text style={styles.linkButtonText}>QR kod oluştur →</Text>
+      </Pressable>
     </View>
   );
 }

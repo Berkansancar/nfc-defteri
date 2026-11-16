@@ -14,6 +14,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { deleteScan, getScan, renameScan, setActiveScan, clearActiveScan } from "../db";
 import { isHceSupported, setActiveCard, clearActiveCard } from "../hce";
+import { makeTagReadOnly } from "../nfc";
 import type { ScanRecord } from "../types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Detail">;
@@ -24,6 +25,7 @@ export default function DetailScreen({ route, navigation }: Props) {
   const [renaming, setRenaming] = useState(false);
   const [labelDraft, setLabelDraft] = useState("");
   const [hceOk, setHceOk] = useState(false);
+  const [locking, setLocking] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -38,6 +40,14 @@ export default function DetailScreen({ route, navigation }: Props) {
   if (!record) return null;
 
   const canUseDirectly = record.kind === "ndef" && !!record.ndefHex;
+  const techList: string[] = (() => {
+    try {
+      return JSON.parse(record.techTypes);
+    } catch {
+      return [];
+    }
+  })();
+  const isUltralightFamily = techList.some((t) => t.includes("MifareUltralight"));
 
   async function handleRename() {
     const label = labelDraft.trim();
@@ -83,6 +93,34 @@ export default function DetailScreen({ route, navigation }: Props) {
     } catch (e: any) {
       Alert.alert("Olmadı", e?.message ?? "Aktif edilemedi.");
     }
+  }
+
+  function handleLock() {
+    Alert.alert(
+      "Kalıcı kilitleme",
+      "Bu etiket bir daha hiçbir şekilde değiştirilemeyecek. Bu işlem GERİ ALINAMAZ. Devam edilsin mi?",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Kalıcı olarak kilitle",
+          style: "destructive",
+          onPress: async () => {
+            setLocking(true);
+            try {
+              await makeTagReadOnly();
+              Alert.alert("Kilitlendi", "Etiket artık kalıcı olarak salt-okunur.");
+            } catch (e: any) {
+              Alert.alert(
+                "Olmadı",
+                "Etiket kilitlenemedi. Doğru etiketi okuttuğundan emin ol ve tekrar dene."
+              );
+            } finally {
+              setLocking(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -150,6 +188,27 @@ export default function DetailScreen({ route, navigation }: Props) {
               Bu cihaz telefonu kart gibi okutma (HCE) özelliğini desteklemiyor.
             </Text>
           )}
+
+          {isUltralightFamily && (
+            <Pressable
+              style={styles.secondaryOutlineButton}
+              onPress={() => navigation.navigate("FlipperExport", { id })}
+            >
+              <Text style={styles.secondaryOutlineButtonText}>
+                Flipper Zero dosyası oluştur (.nfc)
+              </Text>
+            </Pressable>
+          )}
+
+          <Pressable
+            style={[styles.dangerOutlineButton, locking && styles.disabled]}
+            onPress={handleLock}
+            disabled={locking}
+          >
+            <Text style={styles.dangerOutlineButtonText}>
+              {locking ? "Kilitleniyor…" : "Kalıcı olarak kilitle"}
+            </Text>
+          </Pressable>
         </>
       )}
 
@@ -215,4 +274,23 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   deleteButton: { alignItems: "center", paddingVertical: 10 },
   deleteButtonText: { color: "#b91c1c", fontWeight: "600" },
+  disabled: { opacity: 0.6 },
+  secondaryOutlineButton: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#1e40af",
+    backgroundColor: "#ffffff",
+  },
+  secondaryOutlineButtonText: { color: "#1e40af", fontWeight: "700", fontSize: 14 },
+  dangerOutlineButton: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#b91c1c",
+    backgroundColor: "#ffffff",
+  },
+  dangerOutlineButtonText: { color: "#b91c1c", fontWeight: "700", fontSize: 14 },
 });

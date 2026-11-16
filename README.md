@@ -21,6 +21,15 @@ etikete yazabilir veya telefonunu o etiket gibi okutabilirsin.
 4. **Telefonla kullan** — Sadece "yazılabilir" kayıtlarda ve cihaz HCE
    (Host Card Emulation) destekliyorsa görünür. Aktif ettiğinde, telefonun
    o kayıttaki veriyle bir NFC etiketi gibi okutulabilir.
+5. **QR kod oluştur** — Metin, bağlantı, Wi-Fi, kişi, telefon, SMS veya
+   konum bilgisinden QR kod üretir (ana ekrandan erişilir).
+6. **Kalıcı kilitleme** — Yazılabilir bir etiketi bir daha değiştirilemeyecek
+   şekilde kilitler. **Bu işlem geri alınamaz.**
+7. **Flipper Zero'ya aktarma (.nfc)** — Mifare Ultralight/NTAG ailesi
+   etiketler için, etiketten gerçekten okunan ham sayfa verisiyle bir
+   `.nfc` dosyası oluşturur ve paylaşır. Signature/Version/Counter gibi
+   okunmayan alanlar dosyada yer almaz — bu yüzden "en iyi gayret" bir
+   dışa aktarımdır, gerçek Flipper cihazında test edilmelidir.
 
 ## Önemli sınır
 

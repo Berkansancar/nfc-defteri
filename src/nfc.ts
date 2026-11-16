@@ -143,3 +143,66 @@ export async function writeNdefToBlankTag(ndefHex: string): Promise<void> {
 export async function cancelScan(): Promise<void> {
   await NfcManager.cancelTechnologyRequest().catch(() => {});
 }
+
+/**
+ * Bir etiketi kalıcı olarak salt-okunur yapar. GERİ ALINAMAZ.
+ * Etiket zaten kilitliyse veya bu işlemi desteklemiyorsa hata fırlatır.
+ */
+export async function makeTagReadOnly(): Promise<void> {
+  await initNfc();
+  try {
+    await NfcManager.requestTechnology(NfcTech.Ndef);
+    await (NfcManager as any).ndefHandler.makeReadOnly();
+  } finally {
+    await NfcManager.cancelTechnologyRequest().catch(() => {});
+  }
+}
+
+export interface RawUltralightDump {
+  uidHex: string;
+  atqaHex: string | null;
+  sakHex: string | null;
+  pages: string[]; // her biri 4 byte'lık hex sayfa
+}
+
+/**
+ * Mifare Ultralight/NTAG ailesi bir etiketten GERÇEKTEN okunan ham sayfa
+ * verisini döndürür. Hiçbir baytı tahmin etmez/uydurmaz — okuma sayfa
+ * sınırına ulaştığında (etiketin sonu) veya hata aldığında durur.
+ */
+export async function readRawUltralightDump(): Promise<RawUltralightDump> {
+  await initNfc();
+  try {
+    await NfcManager.requestTechnology(NfcTech.MifareUltralight);
+    const tag = await NfcManager.getTag();
+    const uidHex = (tag?.id ?? "").toString().toLowerCase();
+
+    let atqaHex: string | null = null;
+    const atqa = (tag as any)?.atqa;
+    if (Array.isArray(atqa)) atqaHex = bytesToHex(atqa);
+
+    let sakHex: string | null = null;
+    const sak = (tag as any)?.sak;
+    if (typeof sak === "number") sakHex = sak.toString(16).padStart(2, "0");
+
+    const handler = (NfcManager as any).mifareUltralightHandlerAndroid;
+    const pages: string[] = [];
+    let offset = 0;
+    const MAX_PAGES = 256; // güvenlik sınırı (en büyük NTAG216 231 sayfa)
+    while (offset < MAX_PAGES) {
+      try {
+        const chunk: number[] = await handler.mifareUltralightReadPages(offset);
+        for (let i = 0; i < chunk.length; i += 4) {
+          pages.push(bytesToHex(chunk.slice(i, i + 4)));
+        }
+        offset += 4;
+      } catch {
+        break; // etiketin sonuna gelindi
+      }
+    }
+
+    return { uidHex, atqaHex, sakHex, pages };
+  } finally {
+    await NfcManager.cancelTechnologyRequest().catch(() => {});
+  }
+}
